@@ -1,57 +1,95 @@
 {% set version = "24.7.1" %}
-{% set build_number = 5 %}
+{% set build_number = 6 %}
 {% set name = "conda-launchers" %}
+{% set asset_tag = "launchers-{}-{}".format(version, build_number) %}
+{% set asset_base = "https://github.com/AnacondaRecipes/conda-launchers-feedstock/releases/download/" ~ asset_tag %}
+
+# sha256 of the Anaconda-signed executables (release assets at tag
+# {{ asset_tag }}; provenance: dev-instance build via src-build/ ->
+# rocket-platform "Codesign Windows Package" (prod cert) -> release assets).
+{% set sha256_cli_64 = "60809af7ca696da72a30126790637ee19bb0c0abf1eaa88e4688ed434abead81" %}
+{% set sha256_gui_64 = "2931b6222705fd56d267c0a78b1504d3ee81046023c4cd2f7aef947f055af126" %}
+{% set sha256_cli_arm64 = "11f2007b4e7056930556b02681975a3b07c843e81ecbc9db4884c7b0c1c9cf5b" %}
+{% set sha256_gui_arm64 = "b740ccb2c7f432d3243ff51dd130516a1d7b34706b24cbe6c407f45a2bb61e0d" %}
 
 package:
   name: {{ name }}
   version: {{ version }}
 
 source:
-  # Licenses
+  # Anaconda-signed prebuilt launchers, binary-repackaged from feedstock
+  # release assets (built from upstream sources via src-build/, signed with
+  # Anaconda's prod Authenticode cert).
+  - url: {{ asset_base }}/cli-64.exe
+    sha256: {{ sha256_cli_64 }}
+    fn: cli-64.exe
+  - url: {{ asset_base }}/gui-64.exe
+    sha256: {{ sha256_gui_64 }}
+    fn: gui-64.exe
+  - url: {{ asset_base }}/cli-arm64.exe
+    sha256: {{ sha256_cli_arm64 }}
+    fn: cli-arm64.exe
+  - url: {{ asset_base }}/gui-arm64.exe
+    sha256: {{ sha256_gui_arm64 }}
+    fn: gui-arm64.exe
+  # License files from the upstream sources the launchers are built from
+  - url: https://raw.githubusercontent.com/conda/{{ name }}/{{ version }}-5/src/LICENSE
+    sha256: 6df75cebd33d62bc1e0e62ee6431c272aad9c07648853eed3c460ebf1a0c0488
   - url: https://raw.githubusercontent.com/python/cpython/3.7/LICENSE
     sha256: 96e4f59524cde5af4a2ea837ef5e52b65e51f1f999825fd8a9ec3b444cb82aea
     fn: cpython-LICENSE
-  - url: https://raw.githubusercontent.com/conda/{{ name }}/{{ version }}-{{ build_number }}/src/LICENSE
-    sha256: 6df75cebd33d62bc1e0e62ee6431c272aad9c07648853eed3c460ebf1a0c0488
-  # -32 versions can only be compiled with zig so we use those for both variants
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/cli-32-{{ version }}-90b98ef_zig_{{ build_number }}.exe
-    sha256: 3856b8e5971a9238eae5608701fc2694dd2f2084122ce3ba8eae400fc2314599
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/gui-32-{{ version }}-90b98ef_zig_{{ build_number }}.exe
-    sha256: ecfb19aec39ca631846acee20da1e337437c54b157d1c6db3ff0ede2ea8debf6
-
-  # GCC variant
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/cli-64-{{ version }}-e8b2e36_gcc_{{ build_number }}.exe # [compiled_with == "gcc"]
-    sha256: 4d8c479577961d0c6d940966f7987fbb0d6fc98b80edc03b00ee949dd8c1b3e2 # [compiled_with == "gcc"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/gui-64-{{ version }}-e8b2e36_gcc_{{ build_number }}.exe # [compiled_with == "gcc"]
-    sha256: 1ebb2934a75dd3aa5845ec77f7c257a903dacfc3b77e1b893f61f8f281a7d9a9 # [compiled_with == "gcc"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/cli-arm64-{{ version }}-642fc7c_vs2022_{{ build_number }}.exe # [compiled_with == "gcc"]
-    sha256: 883bb0599ad5624acc664c320388a07ffb4f23eec7e0cd29194a9450ff928267 # [compiled_with == "gcc"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/gui-arm64-{{ version }}-642fc7c_vs2022_{{ build_number }}.exe # [compiled_with == "gcc"]
-    sha256: 50c810f190be9fa7f63a829c87e54d265b6aa0d2ac3be6b680030b37a57208ca # [compiled_with == "gcc"]
-
-  # Zig variant
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/cli-64-{{ version }}-ed4fef8_zig_{{ build_number }}.exe # [compiled_with == "zig"]
-    sha256: 860c80fb193d675d4a7b1818f7a93a8df2252982fa2bb0b0b35182f5911f25ff # [compiled_with == "zig"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/cli-arm64-{{ version }}-53f4ca0_zig_{{ build_number }}.exe # [compiled_with == "zig"]
-    sha256: 3833045196b8fcc6e1a58b92cd402af3db8752e9f7d9686e245fd217c08dd244 # [compiled_with == "zig"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/gui-64-{{ version }}-ed4fef8_zig_{{ build_number }}.exe # [compiled_with == "zig"]
-    sha256: 873e31ae9b345d111320aedc7585647190585f849e6154ee36c829bc3eb5c41c # [compiled_with == "zig"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/gui-arm64-{{ version }}-53f4ca0_zig_{{ build_number }}.exe # [compiled_with == "zig"]
-    sha256: 0ba40321aec0c22cbc11ac6d7f82668ec756d5d882c1e2c5b9e4033606af1d32 # [compiled_with == "zig"]
 
 build:
-  number: {{ build_number }}
-  string: {{ PKG_HASH }}_{{ compiled_with }}_{{ build_number }}
   noarch: generic
+  number: {{ build_number }}
+
+requirements:
+  build: []
+  run: []
+
+test:
+  requires:
+    - python
+    - pefile
+    - asn1crypto
+
+    # sha256sum
+    - coreutils        # [unix]  
+    - msys2-coreutils  # [win]
+  files:
+    - verify_signatures.py
+  commands:
+    - test -f "${PREFIX}/share/conda-launchers/cli-64.exe"
+    - test -f "${PREFIX}/share/conda-launchers/gui-64.exe"
+    - test -f "${PREFIX}/share/conda-launchers/cli-arm64.exe"
+    - test -f "${PREFIX}/share/conda-launchers/gui-arm64.exe"
+    # Payload must be byte-identical to the signed release assets
+    - echo "{{ sha256_cli_64 }}  ${PREFIX}/share/conda-launchers/cli-64.exe" | sha256sum -c -
+    - echo "{{ sha256_gui_64 }}  ${PREFIX}/share/conda-launchers/gui-64.exe" | sha256sum -c -
+    - echo "{{ sha256_cli_arm64 }}  ${PREFIX}/share/conda-launchers/cli-arm64.exe" | sha256sum -c -
+    - echo "{{ sha256_gui_arm64 }}  ${PREFIX}/share/conda-launchers/gui-arm64.exe" | sha256sum -c -
+    # Authenticode verification: well-formed PKCS#7, file digest matches the
+    # signed digest, and the signer cert is Anaconda's and in-validity
+    - python verify_signatures.py "${PREFIX}/share/conda-launchers/cli-64.exe" "${PREFIX}/share/conda-launchers/gui-64.exe" "${PREFIX}/share/conda-launchers/cli-arm64.exe" "${PREFIX}/share/conda-launchers/gui-arm64.exe"
 
 about:
   home: https://github.com/conda/conda-launchers
-  summary: "Conda's Windows launchers for Python entry points, repackaged from upstream releases"
+  summary: Conda's Windows launchers for Python entry points, Anaconda-signed prebuilt binaries
   description: |
-    Windows launchers for Python entry points used in the conda ecosystem
+    Windows launchers for Python entry points used in the conda ecosystem.
+
     In order to launch Python entrypoints properly on Windows, a corresponding
     executable is used to proxy the call because shebangs do not work on Windows.
     This is achieved by the launchers (or called shims).
+
+    This noarch package ships Anaconda-signed prebuilt launchers for both
+    `win-64` (`cli-64.exe`, `gui-64.exe`, built with ucrt64 GCC) and
+    `win-arm64` (`cli-arm64.exe`, `gui-arm64.exe`, built with MSVC) in
+    `share/conda-launchers`; the correct executable is selected at install
+    time. The binaries are built from upstream sources (CPython 3.7
+    `launcher.c` + upstream patch, see `src-build/` in the feedstock), signed
+    with Anaconda's prod Authenticode certificate, and binary-repackaged from
+    the feedstock's release assets.
   license: Python-2.0 AND BSD-3-Clause
   license_family: BSD
   license_file:
