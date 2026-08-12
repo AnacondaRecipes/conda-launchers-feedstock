@@ -11,12 +11,12 @@ source:
   - url: https://raw.githubusercontent.com/python/cpython/3.7/LICENSE
     sha256: 96e4f59524cde5af4a2ea837ef5e52b65e51f1f999825fd8a9ec3b444cb82aea
     fn: cpython-LICENSE
-  - url: https://raw.githubusercontent.com/conda/conda-launchers/{{ version }}-{{ build_number }}/src/LICENSE
+  - url: https://raw.githubusercontent.com/conda/{{ name }}/{{ version }}-{{ build_number }}/src/LICENSE
     sha256: 6df75cebd33d62bc1e0e62ee6431c272aad9c07648853eed3c460ebf1a0c0488
   # -32 versions can only be compiled with zig so we use those for both variants
-  - url: https://github.com/conda/conda-launchers/releases/download/{{ version }}-{{ build_number }}/cli-32-{{ version }}-90b98ef_zig_{{ build_number }}.exe
+  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/cli-32-{{ version }}-90b98ef_zig_{{ build_number }}.exe
     sha256: 3856b8e5971a9238eae5608701fc2694dd2f2084122ce3ba8eae400fc2314599
-  - url: https://github.com/conda/conda-launchers/releases/download/{{ version }}-{{ build_number }}/gui-32-{{ version }}-90b98ef_zig_{{ build_number }}.exe
+  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/gui-32-{{ version }}-90b98ef_zig_{{ build_number }}.exe
     sha256: ecfb19aec39ca631846acee20da1e337437c54b157d1c6db3ff0ede2ea8debf6
 
   # GCC variant
@@ -43,25 +43,6 @@ build:
   number: {{ build_number }}
   string: {{ PKG_HASH }}_{{ compiled_with }}_{{ build_number }}
   noarch: generic
-  script:
-    - set -ex
-    - target_dir="${PREFIX}/share/conda-launchers"
-    - mkdir -p "${target_dir}"
-    - cp cli-32-*.exe "${target_dir}/cli-32.exe"
-    - cp gui-32-*.exe "${target_dir}/gui-32.exe"
-    - cp cli-64-*.exe "${target_dir}/cli-64.exe"
-    - cp gui-64-*.exe "${target_dir}/gui-64.exe"
-    - cp cli-arm64-*.exe "${target_dir}/cli-arm64.exe"
-    - cp gui-arm64-*.exe "${target_dir}/gui-arm64.exe"
-
-test:
-  commands:
-    - test -f "${PREFIX}/share/conda-launchers/cli-32.exe"
-    - test -f "${PREFIX}/share/conda-launchers/gui-32.exe"
-    - test -f "${PREFIX}/share/conda-launchers/cli-64.exe"
-    - test -f "${PREFIX}/share/conda-launchers/gui-64.exe"
-    - test -f "${PREFIX}/share/conda-launchers/cli-arm64.exe"
-    - test -f "${PREFIX}/share/conda-launchers/gui-arm64.exe"
 
 about:
   home: https://github.com/conda/conda-launchers
@@ -77,7 +58,7 @@ about:
     - cpython-LICENSE
     - LICENSE
   dev_url: https://github.com/conda/conda-launchers
-  doc_url: https://conda.github.io/conda-launchers/
+  doc_url: https://github.com/conda/conda-launchers/blob/main/README.md
 
 extra:
   recipe-maintainers:
