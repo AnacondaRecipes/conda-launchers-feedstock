@@ -7,51 +7,66 @@ package:
   version: {{ version }}
 
 source:
-  # Licenses
+  - url: https://raw.githubusercontent.com/conda/{{ name }}/{{ version }}-{{ build_number }}/src/cpython-launcher-c-mods-for-setuptools.3.7.patch
+    sha256: 354bb81b5a5c059678f3dfc36a6cbba84714ca180b1cadef7b300d0cb327bb51
+  - url: https://raw.githubusercontent.com/conda/{{ name }}/{{ version }}-{{ build_number }}/src/launcher.manifest
+    sha256: 9ec47595697628058434c8b056c581aefce247c4d774d5392cf6e74fd04075be
+  - url: https://raw.githubusercontent.com/conda/{{ name }}/{{ version }}-{{ build_number }}/src/LICENSE
+    sha256: 6df75cebd33d62bc1e0e62ee6431c272aad9c07648853eed3c460ebf1a0c0488
+  - url: https://raw.githubusercontent.com/python/cpython/3.7/PC/launcher.c
+    sha256: a3167e5908cefa942f63e0de5c6ec7a929e8ca82a382537ab8292e5aaa82ca2e
+    fn: launcher.c.orig
   - url: https://raw.githubusercontent.com/python/cpython/3.7/LICENSE
     sha256: 96e4f59524cde5af4a2ea837ef5e52b65e51f1f999825fd8a9ec3b444cb82aea
     fn: cpython-LICENSE
-  - url: https://raw.githubusercontent.com/conda/{{ name }}/{{ version }}-{{ build_number }}/src/LICENSE
-    sha256: 6df75cebd33d62bc1e0e62ee6431c272aad9c07648853eed3c460ebf1a0c0488
-  # -32 versions can only be compiled with zig so we use those for both variants
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/cli-32-{{ version }}-90b98ef_zig_{{ build_number }}.exe
-    sha256: 3856b8e5971a9238eae5608701fc2694dd2f2084122ce3ba8eae400fc2314599
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/gui-32-{{ version }}-90b98ef_zig_{{ build_number }}.exe
-    sha256: ecfb19aec39ca631846acee20da1e337437c54b157d1c6db3ff0ede2ea8debf6
-
-  # GCC variant
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/cli-64-{{ version }}-e8b2e36_gcc_{{ build_number }}.exe # [compiled_with == "gcc"]
-    sha256: 4d8c479577961d0c6d940966f7987fbb0d6fc98b80edc03b00ee949dd8c1b3e2 # [compiled_with == "gcc"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/gui-64-{{ version }}-e8b2e36_gcc_{{ build_number }}.exe # [compiled_with == "gcc"]
-    sha256: 1ebb2934a75dd3aa5845ec77f7c257a903dacfc3b77e1b893f61f8f281a7d9a9 # [compiled_with == "gcc"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/cli-arm64-{{ version }}-642fc7c_vs2022_{{ build_number }}.exe # [compiled_with == "gcc"]
-    sha256: 883bb0599ad5624acc664c320388a07ffb4f23eec7e0cd29194a9450ff928267 # [compiled_with == "gcc"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/gui-arm64-{{ version }}-642fc7c_vs2022_{{ build_number }}.exe # [compiled_with == "gcc"]
-    sha256: 50c810f190be9fa7f63a829c87e54d265b6aa0d2ac3be6b680030b37a57208ca # [compiled_with == "gcc"]
-
-  # Zig variant
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/cli-64-{{ version }}-ed4fef8_zig_{{ build_number }}.exe # [compiled_with == "zig"]
-    sha256: 860c80fb193d675d4a7b1818f7a93a8df2252982fa2bb0b0b35182f5911f25ff # [compiled_with == "zig"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/cli-arm64-{{ version }}-53f4ca0_zig_{{ build_number }}.exe # [compiled_with == "zig"]
-    sha256: 3833045196b8fcc6e1a58b92cd402af3db8752e9f7d9686e245fd217c08dd244 # [compiled_with == "zig"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/gui-64-{{ version }}-ed4fef8_zig_{{ build_number }}.exe # [compiled_with == "zig"]
-    sha256: 873e31ae9b345d111320aedc7585647190585f849e6154ee36c829bc3eb5c41c # [compiled_with == "zig"]
-  - url: https://github.com/conda/{{ name }}/releases/download/{{ version }}-{{ build_number }}/gui-arm64-{{ version }}-53f4ca0_zig_{{ build_number }}.exe # [compiled_with == "zig"]
-    sha256: 0ba40321aec0c22cbc11ac6d7f82668ec756d5d882c1e2c5b9e4033606af1d32 # [compiled_with == "zig"]
 
 build:
   number: {{ build_number }}
-  string: {{ PKG_HASH }}_{{ compiled_with }}_{{ build_number }}
-  noarch: generic
+  skip: true  # [not win]
+  ignore_run_exports:
+    - {{ compiler("c") }}  # [win and arm64]
+    - {{ stdlib("c") }}    # [win and arm64]
+    - ucrt64-gcc-libs      # [win and x86_64]
+
+requirements:
+  build:
+    - ucrt64-gcc-toolchain_win-64  # [win and x86_64]
+    - msys2-bash                     # [win and x86_64]
+    - {{ compiler("c") }}            # [win and arm64]
+    - {{ stdlib("c") }}              # [win and arm64]
+  run: []
+
+test:
+  requires:
+    - python
+  commands:
+    - if not exist "%PREFIX%\\share\\conda-launchers\\cli-64.exe" exit /b 1      # [win and x86_64]
+    - if not exist "%PREFIX%\\share\\conda-launchers\\gui-64.exe" exit /b 1      # [win and x86_64]
+    - if not exist "%PREFIX%\\share\\conda-launchers\\cli-arm64.exe" exit /b 1  # [win and arm64]
+    - if not exist "%PREFIX%\\share\\conda-launchers\\gui-arm64.exe" exit /b 1  # [win and arm64]
+    - if not exist "%PREFIX%\\Scripts" mkdir "%PREFIX%\\Scripts"  # [win]
+    - copy /Y "%PREFIX%\\share\\conda-launchers\\cli-64.exe" "%PREFIX%\\Scripts\\"  # [win and x86_64]
+    - cd /d "%PREFIX%\\Scripts" && (echo from pathlib import Path> cli-64-script.py && echo print("ok")>> cli-64-script.py && echo Path("cli-64-output.txt").write_text("ok")>> cli-64-script.py)  # [win and x86_64]
+    - set PYLAUNCH_DEBUG=1 && cd /d "%PREFIX%\\Scripts" && cli-64.exe  # [win and x86_64]
+    - if not exist "%PREFIX%\\Scripts\\cli-64-output.txt" exit /b 1  # [win and x86_64]
+    - copy /Y "%PREFIX%\\share\\conda-launchers\\cli-arm64.exe" "%PREFIX%\\Scripts\\"  # [win and arm64]
+    - cd /d "%PREFIX%\\Scripts" && (echo from pathlib import Path> cli-arm64-script.py && echo print("ok")>> cli-arm64-script.py && echo Path("cli-arm64-output.txt").write_text("ok")>> cli-arm64-script.py)  # [win and arm64]
+    - set PYLAUNCH_DEBUG=1 && cd /d "%PREFIX%\\Scripts" && cli-arm64.exe  # [win and arm64]
+    - if not exist "%PREFIX%\\Scripts\\cli-arm64-output.txt" exit /b 1  # [win and arm64]
 
 about:
   home: https://github.com/conda/conda-launchers
-  summary: "Conda's Windows launchers for Python entry points, repackaged from upstream releases"
+  summary: Conda's Windows launchers for Python entry points, built from upstream sources
   description: |
-    Windows launchers for Python entry points used in the conda ecosystem
+    Windows launchers for Python entry points used in the conda ecosystem.
+
     In order to launch Python entrypoints properly on Windows, a corresponding
     executable is used to proxy the call because shebangs do not work on Windows.
     This is achieved by the launchers (or called shims).
+
+    Each platform package ships only the launchers for that architecture:
+    `win-64` builds with ucrt64 GCC, `win-arm64` builds natively with MSVC.
+    Both apply the upstream patch to CPython's launcher.c at build time.
   license: Python-2.0 AND BSD-3-Clause
   license_family: BSD
   license_file:
