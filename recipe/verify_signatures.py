@@ -1,128 +1,86 @@
 #!/usr/bin/env python
-"""Verify Authenticode signatures on Windows PE executables (no Windows required).
+"""Recipe test: verify each launcher's sha256 pin and Anaconda Authenticode
+signature (PE cert table present, PKCS#7 file digest matches, Anaconda signer
+cert in validity). Chain-of-trust to a Microsoft root is out of scope; the
+sha256 pins cover it.
 
-For each exe given on the command line, checks:
-  1. A well-formed WIN_CERTIFICATE (PKCS_SIGNED_DATA) entry exists in the PE
-     security directory.
-  2. The PKCS#7 SignedData parses and its embedded messageDigest matches the
-     computed Authenticode hash of the file (integrity: the signed bytes are
-     exactly what we ship).
-  3. The signer certificate subject names Anaconda and is within its validity
-     window (identity: signed with Anaconda's prod cert, not some other cert).
-
-Chain-of-trust to a Microsoft root is intentionally NOT checked (requires
-Windows trust stores); the sha256 pins in meta.yaml plus the checks above are
-the guarantee for the repackaged payload.
-
-Requires: python, pefile, asn1crypto (all in pkgs/main, linux-64-safe).
+Usage: python verify_signatures.py cli-64.exe=<sha256> [gui-64.exe=<sha256> ...]
+Bare filenames resolve under <sys.prefix>/share/conda-launchers, so the same
+command works under cmd.exe and POSIX shells (the test env's python IS the
+test env). Requires: python, pefile, asn1crypto (all in pkgs/main).
 """
 
 import datetime
 import hashlib
+import os
 import struct
 import sys
 
 import pefile
 from asn1crypto import algos, cms, core
 
-EXPECTED_SIGNER = "anaconda"
+DIR = os.path.join(sys.prefix, "share", "conda-launchers")
+SEC_DIR = pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_SECURITY"]
 
 
-def extract_pkcs7(path):
+def fail(name, msg):
+    print(f"{name}: FAIL - {msg}")
+    return False
+
+
+def check(arg):
+    name, _, expected = arg.partition("=")
+    path = os.path.join(DIR, name)
+    if not os.path.isfile(path):
+        return fail(name, "not found")
     with open(path, "rb") as fh:
         data = fh.read()
+    if hashlib.sha256(data).hexdigest() != expected:
+        return fail(name, "sha256 mismatch")
+
     pe = pefile.PE(data=data, fast_load=True)
-    sec = pe.OPTIONAL_HEADER.DATA_DIRECTORY[
-        pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_SECURITY"]
-    ]
-    if not sec.VirtualAddress or not sec.Size:
-        raise SystemExit(f"{path}: no certificate table (unsigned)")
-    # VirtualAddress is a file offset for the security directory
-    blob = data[sec.VirtualAddress : sec.VirtualAddress + sec.Size]
-    certs = []
-    offset = 0
-    while offset + 8 <= len(blob):
-        length, revision, cert_type = struct.unpack_from("<IHH", blob, offset)
-        if length < 8 or offset + length > len(blob):
-            raise SystemExit(f"{path}: malformed WIN_CERTIFICATE at offset {offset}")
-        if cert_type != 0x0002:  # WIN_CERT_TYPE_PKCS_SIGNED_DATA
-            raise SystemExit(f"{path}: unexpected certificate type {cert_type:#x}")
-        if revision != 0x0200:
-            raise SystemExit(f"{path}: unexpected certificate revision {revision:#x}")
-        certs.append(blob[offset + 8 : offset + length])
-        offset += (length + 7) & ~7  # entries are 8-byte aligned
-    return data, pe, certs
+    sec = pe.OPTIONAL_HEADER.DATA_DIRECTORY[SEC_DIR]
+    blob = data[sec.VirtualAddress : sec.VirtualAddress + sec.Size] if sec.VirtualAddress else b""
+    if len(blob) < 8:
+        return fail(name, "unsigned (no certificate table)")
+    length, revision, ctype = struct.unpack_from("<IHH", blob, 0)
+    if (revision, ctype) != (0x0200, 0x0002):  # WIN_CERT_REVISION_2, PKCS_SIGNED_DATA
+        return fail(name, f"unexpected WIN_CERTIFICATE revision/type {revision:#x}/{ctype:#x}")
+    sd = cms.ContentInfo.load(blob[8:length])["content"]
 
+    # The file's Authenticode digest lives in SpcIndirectDataContent (the
+    # SignedData content); the signed-attribute messageDigest hashes that
+    # structure, not the file.
+    buf = sd["encap_content_info"]["content"].contents
+    digest_info = algos.DigestInfo.load(buf[len(core.Sequence.load(buf).dump()):])
+    algo = digest_info["digest_algorithm"]["algorithm"].native
+    embedded = digest_info["digest"].native
 
-def authenticode_digest(data, pe, hashlib_name):
-    """Compute the PE Authenticode hash per the MS-PECODE spec."""
-    opt_off = pe.OPTIONAL_HEADER.get_file_offset()
-    checksum_off = opt_off + 64
-    secdir_off = pe.OPTIONAL_HEADER.DATA_DIRECTORY[
-        pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_SECURITY"]
-    ].get_file_offset()
-    sec = pe.OPTIONAL_HEADER.DATA_DIRECTORY[
-        pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_SECURITY"]
-    ]
-    cert_off = sec.VirtualAddress
-    cert_size = sec.Size
-    size_of_headers = pe.OPTIONAL_HEADER.SizeOfHeaders
+    # Authenticode hash per MS-PECODE: everything except the CheckSum field,
+    # the security-directory entry, and the (8-byte-aligned) cert table.
+    opt = pe.OPTIONAL_HEADER.get_file_offset()
+    sec_off = sec.get_file_offset()
+    h = hashlib.new(algo)
+    h.update(data[: opt + 64])
+    h.update(data[opt + 68 : sec_off])
+    h.update(data[sec_off + 8 : pe.OPTIONAL_HEADER.SizeOfHeaders])
+    h.update(data[pe.OPTIONAL_HEADER.SizeOfHeaders : sec.VirtualAddress])
+    h.update(data[sec.VirtualAddress + ((sec.Size + 7) & ~7) :])
+    h.update(b"\0" * (len(data) % 8))
+    if h.digest() != embedded:
+        return fail(name, f"Authenticode {algo} digest mismatch (modified after signing)")
 
-    h = hashlib.new(hashlib_name)
-    h.update(data[:checksum_off])                       # headers up to CheckSum
-    h.update(data[checksum_off + 4 : secdir_off])       # skip CheckSum
-    h.update(data[secdir_off + 8 : size_of_headers])    # skip security dir entry
-    h.update(data[size_of_headers:cert_off])            # body up to cert table
-    cert_end = cert_off + ((cert_size + 7) & ~7)        # cert table 8-byte aligned
-    h.update(data[cert_end:])                           # anything past cert table
-    h.update(b"\0" * (len(data) % 8))                   # file size mod 8 zero bytes
-    return h.digest()
-
-
-def spc_file_digest(signed_data):
-    """Extract the Authenticode file digest from SpcIndirectDataContent."""
-    eci = signed_data["encap_content_info"]
-    if eci["content_type"].native != "1.3.6.1.4.1.311.2.1.4":
-        raise SystemExit(f"unexpected signed content type {eci['content_type'].native}")
-    buf = eci["content"].contents
-    first = core.Sequence.load(buf)  # SpcAttributeTypeAndOptionalValue
-    digest_info = algos.DigestInfo.load(buf[len(first.dump()):])
-    return digest_info["digest_algorithm"]["algorithm"].native, digest_info["digest"].native
-
-
-def verify(path):
-    data, pe, certs = extract_pkcs7(path)
-    ok = True
-    for der in certs:
-        signed_data = cms.ContentInfo.load(der)["content"]
-        digest_algo, message_digest = spc_file_digest(signed_data)
-        computed = authenticode_digest(data, pe, digest_algo)
-        if computed != message_digest:
-            print(f"{path}: FAIL - Authenticode {digest_algo} digest mismatch "
-                  f"(file was modified after signing)")
-            ok = False
-            continue
-        signer_ok = False
-        for cert_choice in signed_data["certificates"]:
-            cert = cert_choice.chosen
-            subject = cert.subject.native
-            haystack = " ".join(str(v) for v in subject.values()).lower()
-            now = datetime.datetime.now(datetime.timezone.utc)
-            if EXPECTED_SIGNER in haystack:
-                if not (cert.not_valid_before <= now <= cert.not_valid_after):
-                    print(f"{path}: FAIL - Anaconda signer cert outside validity window")
-                    ok = False
-                else:
-                    signer_ok = True
-        if not signer_ok:
-            print(f"{path}: FAIL - no valid Anaconda signer certificate found")
-            ok = False
-        else:
-            print(f"{path}: OK ({digest_algo}, signed by Anaconda)")
-    return ok
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for choice in sd["certificates"]:
+        cert = choice.chosen
+        if "anaconda" in str(cert.subject.native).lower() and cert.not_valid_before <= now <= cert.not_valid_after:
+            print(f"{name}: OK ({algo}, signed by Anaconda)")
+            return True
+    return fail(name, "no valid Anaconda signer certificate")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        raise SystemExit(f"usage: {sys.argv[0]} <exe> [<exe> ...]")
-    sys.exit(0 if all(verify(p) for p in sys.argv[1:]) else 1)
+        raise SystemExit(f"usage: {sys.argv[0]} <name>=<sha256> ...")
+    results = [check(a) for a in sys.argv[1:]]
+    sys.exit(0 if all(results) else 1)

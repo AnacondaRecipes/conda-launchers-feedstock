@@ -41,6 +41,8 @@ source:
 
 build:
   noarch: generic
+  # Windows-only payload; the noarch artifact built on win-64 installs everywhere.
+  skip: true  # [not win]
   number: {{ build_number }}
 
 requirements:
@@ -52,25 +54,14 @@ test:
     - python
     - pefile
     - asn1crypto
-
-    # sha256sum
-    - coreutils        # [unix]  
-    - msys2-coreutils  # [win]
   files:
     - verify_signatures.py
   commands:
-    - test -f "${PREFIX}/share/conda-launchers/cli-64.exe"
-    - test -f "${PREFIX}/share/conda-launchers/gui-64.exe"
-    - test -f "${PREFIX}/share/conda-launchers/cli-arm64.exe"
-    - test -f "${PREFIX}/share/conda-launchers/gui-arm64.exe"
-    # Payload must be byte-identical to the signed release assets
-    - echo "{{ sha256_cli_64 }}  ${PREFIX}/share/conda-launchers/cli-64.exe" | sha256sum -c -
-    - echo "{{ sha256_gui_64 }}  ${PREFIX}/share/conda-launchers/gui-64.exe" | sha256sum -c -
-    - echo "{{ sha256_cli_arm64 }}  ${PREFIX}/share/conda-launchers/cli-arm64.exe" | sha256sum -c -
-    - echo "{{ sha256_gui_arm64 }}  ${PREFIX}/share/conda-launchers/gui-arm64.exe" | sha256sum -c -
-    # Authenticode verification: well-formed PKCS#7, file digest matches the
-    # signed digest, and the signer cert is Anaconda's and in-validity
-    - python verify_signatures.py "${PREFIX}/share/conda-launchers/cli-64.exe" "${PREFIX}/share/conda-launchers/gui-64.exe" "${PREFIX}/share/conda-launchers/cli-arm64.exe" "${PREFIX}/share/conda-launchers/gui-arm64.exe"
+    # Single cross-platform command: win test commands run under cmd.exe, so
+    # no POSIX test/sha256sum and no ${PREFIX} expansion. The script resolves
+    # bare filenames under <test-prefix>/share/conda-launchers via sys.prefix
+    # and checks existence, sha256 pins, and Authenticode signatures.
+    - python verify_signatures.py cli-64.exe={{ sha256_cli_64 }} gui-64.exe={{ sha256_gui_64 }} cli-arm64.exe={{ sha256_cli_arm64 }} gui-arm64.exe={{ sha256_gui_arm64 }}
 
 about:
   home: https://github.com/conda/conda-launchers
